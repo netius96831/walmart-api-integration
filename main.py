@@ -170,7 +170,7 @@ def get_orders(token):
         print(f"Failed to get orders: {e}")
         return None
 
-def fulfill_order(token, purchase_order_id):
+def fulfill_order(token, purchase_order_id, order_line):
     """Test API 4: Fulfill order"""
     if not token:
         print("No valid token available")
@@ -180,26 +180,30 @@ def fulfill_order(token, purchase_order_id):
     url = f"{base_url}/orders/{purchase_order_id}/shipping"
     
     shipping_data = {
-        "orderLines": [{
-            "lineNumber": "1",
-            "orderLineStatuses": {
-                "orderLineStatus": [{
-                    "status": "Shipped",
-                    "statusQuantity": {
-                        "unitOfMeasurement": "EACH",
-                        "amount": "1"
-                    },
-                    "trackingInfo": {
-                        "shipDateTime": datetime.now().isoformat(),
-                        "carrierName": {
-                            "carrier": "UPS"
-                        },
-                        "methodCode": "Standard",
-                        "trackingNumber": "1Z999999999999999"
+        "orderShipment": {
+            "orderLines": {
+                "orderLine": [{
+                    "lineNumber": order_line["lineNumber"],
+                    "orderLineStatuses": {
+                        "orderLineStatus": [{
+                            "status": "Shipped",
+                            "statusQuantity": {
+                                "unitOfMeasurement": order_line["orderLineQuantity"]["unitOfMeasurement"],
+                                "amount": order_line["orderLineQuantity"]["amount"]
+                            },
+                            "trackingInfo": {
+                                "shipDateTime": datetime.now().isoformat(),
+                                "carrierName": {
+                                    "carrier": "UPS"
+                                },
+                                "methodCode": "Standard",
+                                "trackingNumber": "1Z999999999999999"
+                            }
+                        }]
                     }
                 }]
             }
-        }]
+        }
     }
     
     try:
@@ -212,7 +216,7 @@ def fulfill_order(token, purchase_order_id):
         print(f"Failed to fulfill order: {e}")
         return False
 
-def update_tracking(token, purchase_order_id):
+def update_tracking(token, purchase_order_id, order_line):
     """Test API 5: Update tracking information"""
     if not token:
         print("No valid token available")
@@ -223,14 +227,23 @@ def update_tracking(token, purchase_order_id):
     
     tracking_data = {
         "orderLines": [{
-            "lineNumber": "1",
-            "trackingInfo": {
-                "shipDateTime": datetime.now().isoformat(),
-                "carrierName": {
-                    "carrier": "UPS"
-                },
-                "methodCode": "Standard",
-                "trackingNumber": "1Z999999999999999"
+            "lineNumber": order_line["lineNumber"],
+            "orderLineStatuses": {
+                "orderLineStatus": [{
+                    "status": "Shipped",
+                    "statusQuantity": {
+                        "unitOfMeasurement": order_line["orderLineQuantity"]["unitOfMeasurement"],
+                        "amount": order_line["orderLineQuantity"]["amount"]
+                    },
+                    "trackingInfo": {
+                        "shipDateTime": datetime.now().isoformat(),
+                        "carrierName": {
+                            "carrier": "UPS"
+                        },
+                        "methodCode": "Standard",
+                        "trackingNumber": "1Z999999999999999"
+                    }
+                }]
             }
         }]
     }
@@ -261,7 +274,7 @@ def main():
         "price": 29.99,
         "description": "The Lightlark Saga Book, 3 Books Collection Set, Lightlark, Nightbane, Skyshade, by Alex Aster",
         "publisher": "generic",
-        "image_url": "https://m.media-amazon.com/images/I/71jxhw9YPWL._SL1500_.jpg"
+        "image_url": "https://m.media-amazon.com/images/I/71PJJa+5+IL._SY425_.jpg"
     }
 
     # Test API 1: Add new product
@@ -279,13 +292,14 @@ def main():
             # Get the first order from the list
             order = orders['list']['elements']['order'][0]
             purchase_order_id = order['purchaseOrderId']
+            order_line = order['orderLines']['orderLine'][0]
 
             # Test API 4: Fulfill order
             print("\nTesting API 4: Fulfill order...")
-            if fulfill_order(token, purchase_order_id):
+            if fulfill_order(token, purchase_order_id, order_line):
                 # Test API 5: Update tracking
                 print("\nTesting API 5: Update tracking...")
-                update_tracking(token, purchase_order_id)
+                update_tracking(token, purchase_order_id, order_line)
             else:
                 print("\nFailed to fulfill order. Skipping tracking update.")
         else:
