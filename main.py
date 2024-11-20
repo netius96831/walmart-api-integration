@@ -72,7 +72,7 @@ def add_product(token, book_data):
         return False
         
     base_url = os.getenv('WALMART_BASE_URL')
-    url = f"{base_url}/feeds?feedType=item"  # Changed to use feeds endpoint with feedType
+    url = f"{base_url}/feeds?feedType=item"
     
     feed_data = {
         "feedVersion": "2.2",
@@ -122,7 +122,7 @@ def update_quantity(token, sku, quantity):
         return False
         
     base_url = os.getenv('WALMART_BASE_URL')
-    url = f"{base_url}/feeds?feedType=inventory"  # Changed to use feeds endpoint with feedType
+    url = f"{base_url}/feeds?feedType=inventory"
     
     inventory_data = {
         "feedVersion": "1.4",
@@ -154,7 +154,7 @@ def get_orders(token):
         return None
         
     base_url = os.getenv('WALMART_BASE_URL')
-    url = f"{base_url}/orders/released"  # Using released orders endpoint
+    url = f"{base_url}/orders/released"
     params = {
         'limit': 10,
         'createdStartDate': (datetime.now().replace(day=1)).strftime('%Y-%m-%d')
@@ -275,17 +275,19 @@ def main():
         print("\nTesting API 3: Get orders...")
         orders = get_orders(token)
 
-        if orders and orders.get('list', {}).get('elements', []):
-            order = orders['list']['elements'][0]
+        if orders and orders.get('list', {}).get('elements', {}).get('order', []):
+            # Get the first order from the list
+            order = orders['list']['elements']['order'][0]
             purchase_order_id = order['purchaseOrderId']
 
             # Test API 4: Fulfill order
             print("\nTesting API 4: Fulfill order...")
-            fulfill_order(token, purchase_order_id)
-
-            # Test API 5: Update tracking
-            print("\nTesting API 5: Update tracking...")
-            update_tracking(token, purchase_order_id)
+            if fulfill_order(token, purchase_order_id):
+                # Test API 5: Update tracking
+                print("\nTesting API 5: Update tracking...")
+                update_tracking(token, purchase_order_id)
+            else:
+                print("\nFailed to fulfill order. Skipping tracking update.")
         else:
             print("\nNo orders found to test fulfillment and tracking APIs")
     else:
