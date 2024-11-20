@@ -223,29 +223,33 @@ def update_tracking(token, purchase_order_id, order_line):
         return False
         
     base_url = os.getenv('WALMART_BASE_URL')
-    url = f"{base_url}/orders/{purchase_order_id}/tracking"
+    url = f"{base_url}/orders/{purchase_order_id}/shipping"  # Changed to shipping endpoint
     
     tracking_data = {
-        "orderLines": [{
-            "lineNumber": order_line["lineNumber"],
-            "orderLineStatuses": {
-                "orderLineStatus": [{
-                    "status": "Shipped",
-                    "statusQuantity": {
-                        "unitOfMeasurement": order_line["orderLineQuantity"]["unitOfMeasurement"],
-                        "amount": order_line["orderLineQuantity"]["amount"]
-                    },
-                    "trackingInfo": {
-                        "shipDateTime": datetime.now().isoformat(),
-                        "carrierName": {
-                            "carrier": "UPS"
-                        },
-                        "methodCode": "Standard",
-                        "trackingNumber": "1Z999999999999999"
+        "orderShipment": {  # Added orderShipment wrapper
+            "orderLines": {
+                "orderLine": [{
+                    "lineNumber": order_line["lineNumber"],
+                    "orderLineStatuses": {
+                        "orderLineStatus": [{
+                            "status": "Shipped",
+                            "statusQuantity": {
+                                "unitOfMeasurement": order_line["orderLineQuantity"]["unitOfMeasurement"],
+                                "amount": order_line["orderLineQuantity"]["amount"]
+                            },
+                            "trackingInfo": {
+                                "shipDateTime": datetime.now().isoformat(),
+                                "carrierName": {
+                                    "carrier": "UPS"
+                                },
+                                "methodCode": "Standard",
+                                "trackingNumber": "1Z999999999999999"
+                            }
+                        }]
                     }
                 }]
             }
-        }]
+        }
     }
     
     try:
@@ -274,7 +278,7 @@ def main():
         "price": 29.99,
         "description": "The Lightlark Saga Book, 3 Books Collection Set, Lightlark, Nightbane, Skyshade, by Alex Aster",
         "publisher": "generic",
-        "image_url": "https://m.media-amazon.com/images/I/71PJJa+5+IL._SY425_.jpg"
+        "image_url": "https://m.media-amazon.com/images/I/71jxhw9YPWL._SL1500_.jpg"
     }
 
     # Test API 1: Add new product
