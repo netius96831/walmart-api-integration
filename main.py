@@ -1,166 +1,295 @@
 import os
 import json
-from dotenv import load_dotenv
-import requests
 from datetime import datetime
+import requests
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-class WalmartAPI:
-    def __init__(self):
-        self.client_id = os.getenv('WALMART_CLIENT_ID')
-        self.client_secret = os.getenv('WALMART_CLIENT_SECRET')
-        self.base_url = 'https://marketplace.walmartapis.com/v3'
-        self.token = None
-        
-    def get_token(self):
-        """Get access token from Walmart API"""
-        auth_url = f"{self.base_url}/token"
-        headers = {
-            'WM_SVC.NAME': 'Walmart Marketplace',
-            'WM_QOS.CORRELATION_ID': datetime.now().strftime('%Y-%m-%d.%H:%M:%S'),
-            'Content-Type': 'application/x-www-form-urlencoded',
-        }
-        data = {
-            'grant_type': 'client_credentials'
-        }
+def get_token():
+    """Get access token from Walmart API"""
+    auth_url = os.getenv('WALMART_AUTH_URL')
+    client_id = os.getenv('WALMART_CLIENT_ID')
+    client_secret = os.getenv('WALMART_CLIENT_SECRET')
+    
+    headers = {
+        'WM_SVC.NAME': 'Walmart Marketplace',
+        'WM_QOS.CORRELATION_ID': datetime.now().strftime('%Y-%m-%d.%H:%M:%S'),
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+    }
+    data = 'grant_type=client_credentials'
+    
+    try:
         response = requests.post(
             auth_url,
             headers=headers,
-            auth=(self.client_id, self.client_secret),
-            data=data
+            auth=(client_id, client_secret),
+            data=data,
+            verify=True
         )
-        if response.status_code == 200:
-            self.token = response.json()['access_token']
-            return self.token
-        raise Exception(f"Failed to get token: {response.text}")
+        
+        print(f"Token Request Status Code: {response.status_code}")
+        print(f"Token Request Headers: {response.headers}")
+        print(f"Token Request Response: {response.text}")
+        
+        if response.status_code != 200:
+            print(f"Error getting token. Status code: {response.status_code}")
+            print(f"Response: {response.text}")
+            return None
+            
+        try:
+            token_data = response.json()
+            return token_data.get('access_token')
+        except json.JSONDecodeError as e:
+            print(f"Failed to decode JSON response: {e}")
+            print(f"Response content: {response.text}")
+            return None
+            
+    except requests.exceptions.RequestException as e:
+        print(f"Request failed: {e}")
+        return None
 
-    def get_headers(self):
-        """Get common headers for API requests"""
-        if not self.token:
-            self.get_token()
-        return {
-            'WM_SEC.ACCESS_TOKEN': self.token,
-            'WM_SVC.NAME': 'Walmart Marketplace',
-            'WM_QOS.CORRELATION_ID': datetime.now().strftime('%Y-%m-%d.%H:%M:%S'),
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-        }
+def get_headers(token):
+    """Get common headers for API requests"""
+    if not token:
+        raise ValueError("No valid token provided")
+        
+    return {
+        'Authorization': f'Bearer {token}',
+        'WM_SEC.ACCESS_TOKEN': token,
+        'WM_SVC.NAME': 'Walmart Marketplace',
+        'WM_QOS.CORRELATION_ID': datetime.now().strftime('%Y-%m-%d.%H:%M:%S'),
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    }
 
-    def add_product(self, product_data):
-        """Add new product (batch listing)"""
-        url = f"{self.base_url}/items"
-        headers = self.get_headers()
-        response = requests.post(url, headers=headers, json=product_data)
-        if response.status_code in [200, 201]:
-            return response.json()
-        raise Exception(f"Failed to add product: {response.text}")
+def add_product(token, book_data):
+    """Test API 1: Add new product (batch listing)"""
+    if not token:
+        print("No valid token available")
+        return False
+        
+    base_url = os.getenv('WALMART_BASE_URL')
+    url = f"{base_url}/feeds?feedType=item"  # Changed to use feeds endpoint with feedType
+    
+    feed_data = {
+        "feedVersion": "2.2",
+        "requestId": datetime.now().strftime('%Y%m%d%H%M%S'),
+        "requestBatchId": datetime.now().strftime('%Y%m%d%H%M%S'),
+        "items": [{
+            "mart": "WALMART_US",
+            "sku": book_data["sku"],
+            "wpid": book_data["sku"],
+            "productIdentifiers": [{
+                "productIdType": "ISBN",
+                "productId": book_data["isbn"]
+            }],
+            "productName": book_data["title"],
+            "brand": "Alex Aster",
+            "price": book_data["price"],
+            "shortDescription": book_data["description"],
+            "mainImageUrl": book_data["image_url"],
+            "productType": "BOOK",
+            "categoryPath": "Books/Fiction Books",
+            "publisherInfo": {
+                "publisher": book_data["publisher"],
+                "language": "English",
+                "format": "Paperback"
+            },
+            "shippingWeight": {
+                "value": 1.0,
+                "unit": "POUND"
+            }
+        }]
+    }
+    
+    try:
+        response = requests.post(url, headers=get_headers(token), json=feed_data)
+        print("\n1. Add Product Response:")
+        print(f"Status Code: {response.status_code}")
+        print(f"Response: {response.text}")
+        return response.status_code in [200, 201]
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to add product: {e}")
+        return False
 
-    def update_quantity(self, sku, quantity):
-        """Update product quantity"""
-        url = f"{self.base_url}/inventory"
-        headers = self.get_headers()
-        inventory_data = {
+def update_quantity(token, sku, quantity):
+    """Test API 2: Update quantity"""
+    if not token:
+        print("No valid token available")
+        return False
+        
+    base_url = os.getenv('WALMART_BASE_URL')
+    url = f"{base_url}/feeds?feedType=inventory"  # Changed to use feeds endpoint with feedType
+    
+    inventory_data = {
+        "feedVersion": "1.4",
+        "requestId": datetime.now().strftime('%Y%m%d%H%M%S'),
+        "requestBatchId": datetime.now().strftime('%Y%m%d%H%M%S'),
+        "inventoryItems": [{
             "sku": sku,
             "quantity": {
                 "unit": "EACH",
                 "amount": quantity
             }
-        }
-        response = requests.put(url, headers=headers, json=inventory_data)
-        if response.status_code == 200:
-            return response.json()
-        raise Exception(f"Failed to update quantity: {response.text}")
+        }]
+    }
+    
+    try:
+        response = requests.post(url, headers=get_headers(token), json=inventory_data)
+        print("\n2. Update Quantity Response:")
+        print(f"Status Code: {response.status_code}")
+        print(f"Response: {response.text}")
+        return response.status_code == 200
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to update quantity: {e}")
+        return False
 
-    def get_orders(self, created_after=None):
-        """Get orders"""
-        url = f"{self.base_url}/orders"
-        headers = self.get_headers()
-        params = {}
-        if created_after:
-            params['createdStartDate'] = created_after
+def get_orders(token):
+    """Test API 3: Get orders"""
+    if not token:
+        print("No valid token available")
+        return None
         
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code == 200:
-            return response.json()
-        raise Exception(f"Failed to get orders: {response.text}")
+    base_url = os.getenv('WALMART_BASE_URL')
+    url = f"{base_url}/orders/released"  # Using released orders endpoint
+    params = {
+        'limit': 10,
+        'createdStartDate': (datetime.now().replace(day=1)).strftime('%Y-%m-%d')
+    }
+    
+    try:
+        response = requests.get(url, headers=get_headers(token), params=params)
+        print("\n3. Get Orders Response:")
+        print(f"Status Code: {response.status_code}")
+        print(f"Response: {response.text}")
+        return response.json() if response.status_code == 200 else None
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to get orders: {e}")
+        return None
 
-    def fulfill_order(self, purchase_order_id, tracking_info):
-        """Fulfill order"""
-        url = f"{self.base_url}/orders/{purchase_order_id}/shipping"
-        headers = self.get_headers()
-        response = requests.post(url, headers=headers, json=tracking_info)
-        if response.status_code == 200:
-            return response.json()
-        raise Exception(f"Failed to fulfill order: {response.text}")
+def fulfill_order(token, purchase_order_id):
+    """Test API 4: Fulfill order"""
+    if not token:
+        print("No valid token available")
+        return False
+        
+    base_url = os.getenv('WALMART_BASE_URL')
+    url = f"{base_url}/orders/{purchase_order_id}/shipping"
+    
+    shipping_data = {
+        "orderLines": [{
+            "lineNumber": "1",
+            "orderLineStatuses": {
+                "orderLineStatus": [{
+                    "status": "Shipped",
+                    "statusQuantity": {
+                        "unitOfMeasurement": "EACH",
+                        "amount": "1"
+                    },
+                    "trackingInfo": {
+                        "shipDateTime": datetime.now().isoformat(),
+                        "carrierName": {
+                            "carrier": "UPS"
+                        },
+                        "methodCode": "Standard",
+                        "trackingNumber": "1Z999999999999999"
+                    }
+                }]
+            }
+        }]
+    }
+    
+    try:
+        response = requests.post(url, headers=get_headers(token), json=shipping_data)
+        print("\n4. Fulfill Order Response:")
+        print(f"Status Code: {response.status_code}")
+        print(f"Response: {response.text}")
+        return response.status_code == 200
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to fulfill order: {e}")
+        return False
 
-    def update_tracking(self, purchase_order_id, tracking_info):
-        """Update tracking information"""
-        url = f"{self.base_url}/orders/{purchase_order_id}/tracking"
-        headers = self.get_headers()
-        response = requests.post(url, headers=headers, json=tracking_info)
-        if response.status_code == 200:
-            return response.json()
-        raise Exception(f"Failed to update tracking: {response.text}")
+def update_tracking(token, purchase_order_id):
+    """Test API 5: Update tracking information"""
+    if not token:
+        print("No valid token available")
+        return False
+        
+    base_url = os.getenv('WALMART_BASE_URL')
+    url = f"{base_url}/orders/{purchase_order_id}/tracking"
+    
+    tracking_data = {
+        "orderLines": [{
+            "lineNumber": "1",
+            "trackingInfo": {
+                "shipDateTime": datetime.now().isoformat(),
+                "carrierName": {
+                    "carrier": "UPS"
+                },
+                "methodCode": "Standard",
+                "trackingNumber": "1Z999999999999999"
+            }
+        }]
+    }
+    
+    try:
+        response = requests.post(url, headers=get_headers(token), json=tracking_data)
+        print("\n5. Update Tracking Response:")
+        print(f"Status Code: {response.status_code}")
+        print(f"Response: {response.text}")
+        return response.status_code == 200
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to update tracking: {e}")
+        return False
 
 def main():
-    # Sample book data
-    sample_book = {
+    # Get authentication token
+    print("Getting authentication token...")
+    token = get_token()
+    if not token:
+        print("Failed to get authentication token. Exiting...")
+        return
+
+    # Sample book data from the requirement
+    book_data = {
         "sku": "LGHTRK-SET-3",
-        "productName": "The Lightlark Saga Book, 3 Books Collection Set",
-        "productType": "BOOK",
+        "title": "The Lightlark Saga Book, 3 Books Collection Set, Lightlark, Nightbane, Skyshade, by Alex Aster",
+        "isbn": "9781637996478",
         "price": 29.99,
-        "brand": "Alex Aster",
-        "shortDescription": "The Lightlark Saga Book, 3 Books Collection Set, Lightlark, Nightbane, Skyshade, by Alex Aster",
-        "mainImageUrl": "https://example.com/book-image.jpg",
-        "productIdentifiers": {
-            "isbn": "9781637996478"
-        },
+        "description": "The Lightlark Saga Book, 3 Books Collection Set, Lightlark, Nightbane, Skyshade, by Alex Aster",
         "publisher": "generic",
-        "language": "English",
-        "bookFormat": "Paperback"
+        "image_url": "https://m.media-amazon.com/images/I/71jxhw9YPWL._SL1500_.jpg"
     }
 
-    try:
-        # Initialize API client
-        walmart = WalmartAPI()
+    # Test API 1: Add new product
+    print("\nTesting API 1: Add new product...")
+    if add_product(token, book_data):
+        # Test API 2: Update quantity
+        print("\nTesting API 2: Update quantity...")
+        update_quantity(token, book_data["sku"], 100)
 
-        # 1. Add new product
-        print("Adding new product...")
-        add_result = walmart.add_product(sample_book)
-        print(f"Product added: {add_result}")
+        # Test API 3: Get orders
+        print("\nTesting API 3: Get orders...")
+        orders = get_orders(token)
 
-        # 2. Update quantity
-        print("\nUpdating quantity...")
-        quantity_result = walmart.update_quantity("LGHTRK-SET-3", 100)
-        print(f"Quantity updated: {quantity_result}")
+        if orders and orders.get('list', {}).get('elements', []):
+            order = orders['list']['elements'][0]
+            purchase_order_id = order['purchaseOrderId']
 
-        # 3. Get orders
-        print("\nGetting recent orders...")
-        orders = walmart.get_orders()
-        print(f"Orders retrieved: {orders}")
+            # Test API 4: Fulfill order
+            print("\nTesting API 4: Fulfill order...")
+            fulfill_order(token, purchase_order_id)
 
-        # 4. Fulfill sample order (if any orders exist)
-        if orders.get('elements'):
-            order = orders['elements'][0]
-            tracking_info = {
-                "carrier": "UPS",
-                "trackingNumber": "1Z999999999999999",
-                "shipDateTime": datetime.now().isoformat()
-            }
-            
-            print("\nFulfilling order...")
-            fulfill_result = walmart.fulfill_order(order['purchaseOrderId'], tracking_info)
-            print(f"Order fulfilled: {fulfill_result}")
-
-            # 5. Update tracking
-            print("\nUpdating tracking info...")
-            tracking_result = walmart.update_tracking(order['purchaseOrderId'], tracking_info)
-            print(f"Tracking updated: {tracking_result}")
-
-    except Exception as e:
-        print(f"Error occurred: {str(e)}")
+            # Test API 5: Update tracking
+            print("\nTesting API 5: Update tracking...")
+            update_tracking(token, purchase_order_id)
+        else:
+            print("\nNo orders found to test fulfillment and tracking APIs")
+    else:
+        print("\nFailed to add product. Skipping remaining tests.")
 
 if __name__ == "__main__":
     main()
